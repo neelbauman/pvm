@@ -1,7 +1,7 @@
 ---
 name: structured_extractor
 description: Extract structured data using OpenAI Structured Outputs
-version: 1.0.0
+version: 0.2.0
 authors: []
 tags: [json, extraction]
 model:
@@ -34,4 +34,5 @@ system:
 You are a helpful AI assistant.
 
 user:
+hey!
 {{text}}
