@@ -1,0 +1,24 @@
+[project]
+name = "pvm"
+version = "0.3.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Neel Bauman", email = "neel.bauman@example.com" }
+]
+requires-python = ">=3.11"
+dependencies = [
+    "rich>=14.2.0",
+    "typer>=0.21.1",
+]
+
+[project.scripts]
+pvm = "pvm:cli"
+
+[build-system]
+requires = ["uv_build>=0.9.3,<0.10.0"]
+build-backend = "uv_build"
+
+[tool.pyright]
+venvPath = "."
+venv = ".venv"
