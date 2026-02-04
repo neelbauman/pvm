@@ -24,29 +24,41 @@ def init(
     ),
 ):
     """
-    Start tracking a file. If file doesn't exist, create it from a template.
+    Create a NEW file from a template and start tracking it.
+    Automatically creates parent directories if they don't exist.
     """
     # テンプレートの解決
-    content_to_write = ""
-    if not file.exists():
-        # カレントディレクトリ(またはファイルの親)を基準にテンプレートを探す
-        avail_templates = templates.get_available_templates(file.parent)
+    # 親ディレクトリが存在しない場合でも、テンプレート検索の基準点としては使える
+    context_dir = file.parent if file.parent.exists() else Path.cwd()
+    avail_templates = templates.get_available_templates(context_dir)
+    
+    target_template = template
+    if not target_template:
+        target_template = templates.get_default_template_name(file.suffix)
         
-        target_template = template
-        if not target_template:
-            target_template = templates.get_default_template_name(file.suffix)
-            
-        if target_template in avail_templates:
-            content_to_write = avail_templates[target_template]
-            console.print(f"[dim]Using template: {target_template}[/dim]")
-        else:
-            # 該当テンプレートがない場合は警告を出してbasicを使うなどの処理
-            # ここではエラーメッセージを出して候補を表示
-            if target_template != "basic":
-                console.print(f"[yellow]Template '{target_template}' not found. Using empty file/basic.[/yellow]")
-            console.print(f"Available: {', '.join(avail_templates.keys())}")
-            
-    core.initialize_file(file, content_to_write, console)
+    content_to_write = ""
+    if target_template in avail_templates:
+        content_to_write = avail_templates[target_template]
+        console.print(f"[dim]Using template: {target_template}[/dim]")
+    else:
+         if target_template != "basic":
+            console.print(f"[yellow]Template '{target_template}' not found. Using empty file/basic.[/yellow]")
+         console.print(f"Available: {', '.join(avail_templates.keys())}")
+    
+    # 新規作成処理 (Core呼び出し)
+    core.create_new_file(file, content_to_write, console)
+
+@app.command(name="track")
+def track(file: Path):
+    """
+    Start tracking an EXISTING file.
+    """
+    core.track_existing_file(file, console)
+
+@app.command(name="add", hidden=True)
+def add_cmd(file: Path):
+    """Alias for 'track'"""
+    core.track_existing_file(file, console)
 
 @app.command(name="commit")
 def commit_cmd(
@@ -67,7 +79,7 @@ def list_versions(file: Optional[Path] = typer.Argument(None)):
     Show history for a file, or list all tracked files with their status.
     """
     if file:
-        # --- File History Mode (Single File) ---
+        # --- File History Mode ---
         store_path = core.get_store_path(file)
         if not (store_path / "meta.json").exists():
             console.print(f"[red]No history for {file}[/red]")
@@ -86,10 +98,9 @@ def list_versions(file: Optional[Path] = typer.Argument(None)):
             table.add_row(ver, entry["timestamp"], entry["message"], style=style)
         console.print(table)
     else:
-        # --- Project Overview Mode (All Files) ---
+        # --- Project Overview Mode ---
         root = config.find_project_root(Path.cwd())
         
-        # Coreロジックを使って一覧を取得
         tracked_files = core.list_all_tracked_files(root)
 
         if not tracked_files:
@@ -137,7 +148,6 @@ def list_templates():
     table.add_column("Source", style="dim")
     
     for name in avail.keys():
-        # Source判定 (簡易的)
         if name in templates.BUILTINS:
             source = "Built-in"
         else:

@@ -70,12 +70,9 @@ def parse_version(ver: str) -> Tuple[int, int, int]:
 
 # --- Business Logic ---
 
-def initialize_file(file: Path, content: str, console: Console):
+def _start_tracking_internal(file: Path, console: Console):
     """
-    initコマンドのロジック:
-    - ファイルが存在しない場合は作成 (contentを使用)
-    - 既存ファイルには触らない
-    - .prompts/ 内に初期スナップショットを作成
+    内部関数: 指定されたファイル（存在確認済み）の追跡を開始し、初期スナップショットを作成します。
     """
     store_path = get_store_path(file)
     
@@ -84,12 +81,6 @@ def initialize_file(file: Path, content: str, console: Console):
         return
     
     store_path.mkdir(parents=True, exist_ok=True)
-    
-    # ファイル作成（存在しない場合のみ）
-    if not file.exists():
-        console.print(f"[cyan]Creating {file} ...[/cyan]")
-        with open(file, "w", encoding="utf-8") as f:
-            f.write(content)
     
     # 初期コミットの作成
     initial_ver = "0.1.0"
@@ -103,8 +94,38 @@ def initialize_file(file: Path, content: str, console: Console):
         "filename": artifact_name
     }
     save_meta(store_path, [entry])
-    console.print(f"[green]Initialized {file} at version {initial_ver}[/green]")
+    console.print(f"[green]Started tracking {file} at version {initial_ver}[/green]")
     console.print("[dim]Note: Versions are tracked in .prompts/ (Non-intrusive)[/dim]")
+
+def create_new_file(file: Path, content: str, console: Console):
+    """
+    initコマンド用: 新規ファイルを作成して追跡を開始します。
+    親ディレクトリが存在しない場合は再帰的に作成します。
+    """
+    if file.exists():
+        console.print(f"[red]Error:[/red] File {file} already exists. Use 'pvm track' to track existing files.")
+        raise typer.Exit(1)
+    
+    # 親ディレクトリの自動作成 (mkdir -p)
+    if not file.parent.exists():
+        file.parent.mkdir(parents=True, exist_ok=True)
+        console.print(f"[dim]Created directory: {file.parent}[/dim]")
+
+    console.print(f"[cyan]Creating {file} ...[/cyan]")
+    with open(file, "w", encoding="utf-8") as f:
+        f.write(content)
+        
+    _start_tracking_internal(file, console)
+
+def track_existing_file(file: Path, console: Console):
+    """
+    trackコマンド用: 既存ファイルの追跡を開始します。
+    """
+    if not file.exists():
+        console.print(f"[red]Error:[/red] File {file} does not exist. Use 'pvm init' to create a new file.")
+        raise typer.Exit(1)
+
+    _start_tracking_internal(file, console)
 
 def commit_file(
     file: Path, 
@@ -115,14 +136,11 @@ def commit_file(
     console: Console
 ):
     """
-    commitコマンドのロジック:
-    - 変更検知
-    - 新しいバージョンの算出 (Default: Minor update)
-    - スナップショット保存 (元ファイルは書き換えない)
+    commitコマンド用: 変更を検知し、新しいバージョンを保存します。
     """
     store_path = get_store_path(file)
     if not store_path.exists():
-        console.print(f"[red]Not initialized. Run 'init {file}' first.[/red]")
+        console.print(f"[red]Not initialized. Run 'pvm track {file}' first.[/red]")
         raise typer.Exit(1)
 
     history = load_meta(store_path)
@@ -184,11 +202,9 @@ def list_all_tracked_files(root: Path) -> List[Dict]:
 
         # ディレクトリ構造から元のファイルパスを逆算
         try:
-            # 例: ProjectRoot/.prompts/src/my_prompt.py -> src/my_prompt.py
             rel_path = store_dir.relative_to(prompts_root)
             original_file_path = root / rel_path
         except ValueError:
-            # 構造がイレギュラーな場合のフォールバック
             original_file_path = root / store_dir.name
 
         exists = original_file_path.exists()
@@ -200,13 +216,9 @@ def list_all_tracked_files(root: Path) -> List[Dict]:
             "exists": exists,
         })
     
-    # パス順にソートして返却
     return sorted(results, key=lambda x: x["path"])
 
 def diff_file(file: Path, version: str, console: Console):
-    """
-    指定バージョンとの差分を表示します。ファイルが存在しない場合はエラーになります。
-    """
     if not file.exists():
         console.print(f"[red]Error:[/red] File {file} does not exist. Use 'checkout' to restore it.")
         raise typer.Exit(1)
@@ -233,7 +245,7 @@ def diff_file(file: Path, version: str, console: Console):
 def checkout_file(file: Path, version: str, console: Console):
     """
     指定バージョンを復元します。
-    ファイルや親ディレクトリが削除されていても復元します。
+    親ディレクトリごと削除されていても復元します。
     """
     store_path = get_store_path(file)
     history = load_meta(store_path)
@@ -245,7 +257,6 @@ def checkout_file(file: Path, version: str, console: Console):
         
     src = store_path / target["filename"]
     
-    # 警告メッセージの出し分け
     if file.exists():
         msg = f"Overwrite {file} with version {version}?"
     else:
@@ -254,7 +265,7 @@ def checkout_file(file: Path, version: str, console: Console):
     if not typer.confirm(msg):
         raise typer.Abort()
 
-    # 親ディレクトリがない場合は作成する (削除されたディレクトリの復元対応)
+    # 親ディレクトリがない場合は作成する
     if not file.parent.exists():
         file.parent.mkdir(parents=True, exist_ok=True)
 

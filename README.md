@@ -1,137 +1,143 @@
-# Prompt Version Manager
+# pvm (Prompt Version Manager)
 
-LLMプロンプト開発（Prompt Engineering）における**「試行錯誤」の履歴を、Gitのコミット履歴を汚さずにローカルで管理するためのCLIツール**です。
+**プロンプトのための、ちいさなバージョン管理ツール。**
 
-`.prompty` や `.md` ファイルのYAML Frontmatterに含まれる `version` フィールドを自動的に解析・更新し、スナップショットを保存します。
+`pvm` は、LLMプロンプトを主要なユースケース対象として設計された軽量で非侵入型のバージョン管理ツールです。
+ソースファイル自体を書き換えることなく、プロンプトファイル（`.prompty`, `.py`, `.md` など）の変更履歴を追跡します。
 
-## 🌟 特徴
+Gitと併用して使う、「超強力なローカル履歴管理」や「Undo/Redo」のようなものだと考えてください。
 
-* **Git履歴の分離**: プロンプトの微調整（"temperatureを0.1下げた"、"few-shotを1つ追加した"など）をGitコミットせず、専用の `.prompts` ディレクトリで管理します。
-* **Frontmatter統合**: ファイル内の `version: x.x.x` を自動的に読み書きします。
-* **手動変更の優先 (Manual Precedence)**: エディタで直接 `version` を書き換えた場合、ツールはそれを検知し、その手動バージョンを正として採用します。
-* **変更検知**: 内容に変更がない場合の無駄な保存を防ぎます。
-* **テンプレート機能**: `.prompty` のボイラープレートを自動生成して素早く書き始められます。
-* **RichなUI**: `rich` ライブラリによる見やすいテーブル表示と、色分けされたDiff表示。
+## ✨ 主な特徴
 
-## 📦 必要要件
+* **非侵入型 (Non-Intrusive)**: あなたのソースコードには一切触れません。メタデータの注入や、YAML Frontmatterの書き換えは行いません。
+* **あらゆるファイルに対応**: Pythonスクリプト、Markdown、JSON、SQL、そしてもちろん `.prompty` も。テキストファイルなら何でも管理できます。
+* **きれいなGit履歴**: 試行錯誤の履歴は隠しディレクトリ `.prompts/` で管理されるため、メインのGit履歴を汚しません。
+* **堅牢な復元機能**: ファイルやディレクトリごと削除してしまっても、`pvm checkout` で構造ごと復元できます。
+* **テンプレートシステム**: 組み込みテンプレート（`azure`, `openai`）や、独自のカスタムテンプレートを使って素早くプロンプト作成を開始できます。
 
-* Python 3.10+
-* [Typer](https://typer.tiangolo.com/)
-* [Rich](https://rich.readthedocs.io/)
+## 📦 インストール
 
-## 🚀 インストール
-
-1. git clone します。
-   ```bash
-   git clone https://github.com/neelbauman/pvm.git
-   ```
-
-2. uvで依存関係共々ツールとしてインストールするのが楽です。
-    ```bash
-    cd pvm
-    uv tool install .
-
-    # pvmが使えるようになっているはず
-    pvm --help
-
-    ```
-
-
-## 📖 使い方
-
-### 1. 初期化 (`init`)
-
-ファイルを追跡対象にします。ファイルが存在しない場合はテンプレートから作成します。
+Python 3.9以上が必要です。
 
 ```bash
-# 基本的な初期化
-pvm init my_prompt.prompty
+# pipでインストール (公開後)
+pip install pvm-cli
 
-# テンプレートを指定して作成（prompty, basic, empty が利用可能）
-pvm init new_task.md --template basic
-
-# 既存ファイルをテンプレートとして指定することも可能（バージョンは初期化される）
-pvm init super_task.md -t new_task.md
+# または uv を使用してインストール
+uv tool install .
 
 ```
 
-### 2. 保存 (`save`)
+## 🚀 はじめ方
 
-現在の状態をスナップショットとして保存し、バージョンを上げます。
+### 1. 新規プロジェクト / 新規ファイルの作成 (`init`)
+
+テンプレートから新しいプロンプトファイルを作成します。親ディレクトリが存在しない場合は自動的に作成されます。
 
 ```bash
-# マイナーバージョンアップ (デフォルト: 0.1.0 -> 0.2.0)
-pvm save my_prompt.prompty -m "制約条件を追加"
+# Azure OpenAI スタイルのプロンプトを新規作成
+pvm init my_agent/chat.prompty --template azure
 
-# パッチバージョンアップ (0.1.0 -> 0.1.1)
-pvm save my_prompt.prompty -m "Typo修正" --patch
-
-# メジャーバージョンアップ (0.1.0 -> 1.0.0)
-pvm save my_prompt.prompty -m "プロンプト構造を大幅に変更" --major
+# シンプルなMarkdownプロンプトを新規作成
+pvm init ideas/draft.md --template basic
 
 ```
 
-**💡 手動バージョン変更の挙動:**
-エディタで `my_prompt.prompty` のバージョンを直接 `0.5.0` に書き換えてから `save` コマンドを実行すると、ツールは自動採番を行わず、手動で指定された `0.5.0` を採用して保存します。
+### 2. 既存ファイルの追跡開始 (`track`)
 
-### 3. 履歴の確認 (`list`)
-
-ファイルのバージョン履歴を表示します。
+すでに手元にあるファイルを管理対象に追加します。
 
 ```bash
-# プロジェクト内の管理されている全ファイルを表示
+pvm track scripts/legacy_prompt.py
+# エイリアス: pvm add
+
+```
+
+### 3. バージョンの保存 (`commit`)
+
+気が向いたときにいつでもバージョンを保存しましょう。些細な変更でGitのコミットログを汚す心配はありません。
+
+```bash
+pvm commit chat.prompty -m "システムプロンプトを微調整"
+pvm commit chat.prompty --major -m "全面的な書き直し"
+
+```
+
+### 4. 履歴とステータスの確認 (`list`)
+
+管理中のファイル一覧と、その状態（`Active`: 存在する / `Missing`: 削除された）を確認できます。
+
+```bash
+# 管理中の全ファイル一覧を表示
 pvm list
 
-# 特定のファイルの履歴を表示
-pvm list my_prompt.prompty
+# 特定のファイルの履歴詳細を表示
+pvm list chat.prompty
 
 ```
 
-### 4. 差分確認 (`diff`)
+### 5. バージョンの復元 (`checkout`)
 
-現在のファイルと、過去のバージョンとの差分を表示します。
+過去の任意のバージョンに戻せます。ファイル（あるいはそのディレクトリごと）削除されていても、`pvm` が再構築して復元します。
 
 ```bash
-# 現在のファイル vs バージョン 0.1.0
-pvm diff my_prompt.prompty 0.1.0
+# バージョン 0.1.0 に復元
+pvm checkout chat.prompty 0.1.0
 
 ```
 
-### 5. 復元 (`checkout`)
+## 🎨 テンプレートシステム
 
-過去のバージョンを現在のファイルに書き戻します。
+`pvm` は以下の優先順位でテンプレートを探します：
+
+1. **プロジェクトローカル**: `<ProjectRoot>/.prompts/templates/` (チーム内での標準化に最適)
+2. **ユーザーグローバル**: `~/.config/pvm/templates/` (個人のコレクション)
+3. **組み込み (Built-in)**: `azure`, `openai`, `basic`
 
 ```bash
-pvm checkout my_prompt.prompty 0.1.0
+# 利用可能なテンプレート一覧を表示
+pvm template list
+
+# 既存のファイルをカスタムテンプレートとして登録
+pvm template add my_best_prompt.prompty --name my_standard
 
 ```
 
-## 📂 ディレクトリ構造
+## 📂 仕組み
 
-管理データはプロジェクトルートの `.prompts` ディレクトリに保存されます。
+`pvm` は、すべてのバージョン履歴をプロジェクトルートの隠しディレクトリ `.prompts/` に保存します。
 
 ```text
-ProjectRoot/
-├── my_prompt.prompty       # 作業中のファイル
-├── .prompts/               # 隠しディレクトリ
-│   ├── .gitignore          # 履歴ファイルをGitから除外
-│   └── my_prompt.prompty/
-│       ├── meta.json       # バージョンメタデータ
-│       ├── v0.1.0_my_prompt.prompty
-│       ├── v0.2.0_my_prompt.prompty
-│       └── ...
-└── ...
+my_project/
+├── .prompts/
+│   ├── .gitignore         # .prompts/ 内をすべてGit対象外にします
+│   ├── chat.prompty/
+│   │   ├── meta.json      # バージョンメタデータ
+│   │   ├── v0.1.0_chat.prompty
+│   │   └── v0.2.0_chat.prompty
+│   └── ...
+├── chat.prompty           # あなたの作業ファイル (pvmは書き換えません)
+└── main.py
 
 ```
 
-デフォルトでは `.prompts/.gitignore` に `*` が書き込まれ、履歴ファイルはGit管理対象外となります。チームで履歴を共有したい場合は、この `.gitignore` を編集してください。
+`.prompts/.gitignore` が自動生成されるため、細かい履歴（`pvm`のデータ）をGitにコミットしてしまう心配はありません。
+ワークツリーにある `chat.prompty` などの正本だけをGitで管理できます。
 
-## ✅ 対応フォーマット
+## 🛠️ 開発
 
-以下の拡張子で、YAML Frontmatter (`--- ... ---`) を持つファイルをサポートしています。
+このプロジェクトは依存関係管理に `uv` を使用しています。
 
-* `.prompty`
-* `.md`, `.markdown`, `.mdx`
+```bash
+# テストの実行
+uv run pytest
+
+# コードフォーマット
+uv run ruff format
 
 ```
+
+## ライセンス
+
+MIT
 
