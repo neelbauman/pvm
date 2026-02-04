@@ -13,7 +13,8 @@ def test_init_creates_structure(temp_project):
     content = "Initial content"
     
     # ファイル作成 & init
-    core.initialize_file(file_path, content, console)
+    # Change: initialize_file -> create_new_file
+    core.create_new_file(file_path, content, console)
     
     # .prompts ディレクトリの確認
     store_path = temp_project / ".prompts" / "test_prompt.md"
@@ -31,7 +32,8 @@ def test_init_creates_structure(temp_project):
 def test_global_gitignore_created(temp_project):
     """プロジェクトルートの .prompts/.gitignore が生成されるか"""
     file_path = temp_project / "foo.txt"
-    core.initialize_file(file_path, "content", console)
+    # Change: initialize_file -> create_new_file
+    core.create_new_file(file_path, "content", console)
     
     gitignore = temp_project / ".prompts" / ".gitignore"
     assert gitignore.exists()
@@ -45,7 +47,8 @@ def test_commit_does_not_modify_source(temp_project):
     initial_content = "print('hello')"
     
     # 1. Init
-    core.initialize_file(file_path, initial_content, console)
+    # Change: initialize_file -> create_new_file
+    core.create_new_file(file_path, initial_content, console)
     
     # 2. 編集
     time.sleep(0.01) # タイムスタンプ更新のため
@@ -68,7 +71,8 @@ def test_commit_does_not_modify_source(temp_project):
 def test_list_status_missing(temp_project):
     """ファイルが削除された場合に 'exists': False が返るか"""
     file_path = temp_project / "lost.md"
-    core.initialize_file(file_path, "content", console)
+    # Change: initialize_file -> create_new_file
+    core.create_new_file(file_path, "content", console)
     
     # ファイルを削除
     file_path.unlink()
@@ -87,16 +91,17 @@ def test_checkout_restores_deleted_directory(temp_project):
     # 深い階層のファイルを作成
     file_path = temp_project / "src" / "prompts" / "deep.prompty"
     file_path.parent.mkdir(parents=True)
-    core.initialize_file(file_path, "original", console)
+    # Change: initialize_file -> create_new_file
+    core.create_new_file(file_path, "original", console)
     
     # 親ディレクトリごと削除 (rm -rf src/prompts)
     shutil.rmtree(temp_project / "src")
     assert not file_path.exists()
     
     # Checkout (Restore)
-    # user input confirmation mock is needed if interactive, 
-    # but core.checkout_file logic handles confirm via typer which is tricky to mock directly in unit test 
-    # without CliRunner. Here we assume successful run or use CliRunner in integration test.
-    # To test logic directly, we verify logic manually or use CliRunner in test_cli.
-    pass
+    # Improved: confirm=False を使ってロジックを直接テスト
+    core.checkout_file(file_path, "0.1.0", console, confirm=False)
+    
+    assert file_path.exists()
+    assert file_path.read_text("utf-8") == "original"
 
